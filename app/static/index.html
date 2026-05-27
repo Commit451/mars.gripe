@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>mars.gripe — Chromecast your x.com videos</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>mars.gripe</h1>
+      <p class="hint">Chromecast your x.com videos.</p>
+    </header>
+
+    <form id="resolve-form">
+      <input
+        type="url"
+        id="url-input"
+        placeholder="https://x.com/i/broadcasts/..."
+        required
+        autocomplete="off"
+        spellcheck="false"
+      >
+      <button type="submit" id="resolve-btn">Resolve</button>
+    </form>
+
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+
+    <section id="result" class="result" hidden>
+      <div class="meta">
+        <img id="thumb" alt="" hidden>
+        <div class="meta-text">
+          <h2 id="title"></h2>
+          <p id="subtitle"></p>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="cast-btn" disabled>Cast to Chromecast</button>
+        <button id="preview-btn" class="secondary">Preview in browser</button>
+      </div>
+      <video id="preview" controls playsinline hidden></video>
+    </section>
+
+    <footer>
+      <p>Chromecast requires Chrome, Edge, or another Chromium-based browser on the same network as the cast device.</p>
+    </footer>
+  </main>
+
+  <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
