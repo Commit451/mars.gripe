@@ -36,3 +36,16 @@ jobs:
           echo "healthcheck never responded"
           docker logs smoke
           exit 1
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger deploy on husavik
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"project": "xcast"}' \
+            https://deploy.jawnnypoo.com/deploy
