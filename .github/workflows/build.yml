@@ -47,5 +47,5 @@ jobs:
           curl -fsS -X POST \
             -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{"project": "xcast"}' \
+            -d '{"project": "marsgripe"}' \
             https://deploy.jawnnypoo.com/deploy
