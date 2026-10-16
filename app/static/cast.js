@@ -26,8 +26,10 @@ export class CastSender {
   constructor({
     getSdk = () => ({ framework: globalThis.cast?.framework, api: globalThis.chrome?.cast }),
     onChange = () => {},
-    setTimer = setTimeout,
-    clearTimer = clearTimeout,
+    // Browser timers require Window as their receiver. Arrow wrappers avoid
+    // invoking native setTimeout/clearTimeout with this CastSender as `this`.
+    setTimer = (callback, delay) => globalThis.setTimeout(callback, delay),
+    clearTimer = (timer) => globalThis.clearTimeout(timer),
   } = {}) {
     this.getSdk = getSdk;
     this.onChange = onChange;

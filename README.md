@@ -64,6 +64,10 @@ uv run --no-project --with playwright python tests/browser_smoke.py --base-url h
 
 The browser checks explicitly mock resolution and Cast selection, then separately
 verify initialization with Google's real SDK. They never launch real-device playback.
+The picker/media-flow regression runs with **native browser timers**, not only a
+fake clock: browser timer functions require a Window receiver, unlike Node timers
+and many clock mocks. CI runs these browser checks before deployment using
+Playwright's Chromium (`--channel chromium`).
 
 ## License
 

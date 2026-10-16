@@ -1,4 +1,4 @@
-import { CastSender, loadCastSdk } from './cast.js?v=2';
+import { CastSender, loadCastSdk } from './cast.js?v=3';
 
 const form = document.getElementById('resolve-form');
 const urlInput = document.getElementById('url-input');

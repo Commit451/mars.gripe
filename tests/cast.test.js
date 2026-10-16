@@ -51,6 +51,23 @@ function harness() {
   return { sender, context, session, api, framework, changes, loads, listeners, time };
 }
 
+test('default timer wrappers retain the global receiver required by browser APIs', async (t) => {
+  const setTimer = t.mock.method(globalThis, 'setTimeout', function (callback, delay) {
+    assert.equal(this, globalThis, 'native setTimeout must not receive CastSender as this');
+    assert.equal(typeof callback, 'function');
+    assert.equal(delay, 15000);
+    return 42;
+  });
+  const clearTimer = t.mock.method(globalThis, 'clearTimeout', function (timer) {
+    assert.equal(this, globalThis, 'native clearTimeout must not receive CastSender as this');
+    assert.equal(timer, 42);
+  });
+  const sender = new CastSender();
+  assert.equal(await sender.waitWithGuidance(Promise.resolve('ok'), 15000, 'waiting'), 'ok');
+  assert.equal(setTimer.mock.callCount(), 1);
+  assert.equal(clearTimer.mock.callCount(), 1);
+});
+
 test('initializes once with default web receiver, not Android TV Cast Connect', () => {
   const h = harness();
   h.sender.initialize(true);

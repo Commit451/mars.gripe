@@ -64,11 +64,12 @@ SDK_DOUBLE = """
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:18765")
+    parser.add_argument("--channel", choices=["chrome", "chromium"], default="chrome")
     args = parser.parse_args()
     base = args.base_url.rstrip("/")
     results = []
     with sync_playwright() as p:
-        browser = p.chromium.launch(channel="chrome", headless=True)
+        browser = p.chromium.launch(channel=args.channel, headless=True)
 
         def new_page(sdk="mock", mobile=False):
             options = {"viewport": {"width": 412, "height": 915}, "is_mobile": True, "has_touch": True} if mobile else {}
@@ -90,6 +91,43 @@ def main():
             page.locator("#resolve-btn").click()
             expect(page.locator("#result")).to_be_visible()
             expect(page.locator("#status")).to_contain_text("Video resolved")
+
+        # Do not install Playwright's fake clock here: it does not enforce the
+        # Window receiver required by native setTimeout/clearTimeout. The fake
+        # clock previously masked a real "Illegal invocation" after picker open.
+        context, page, errors = new_page(mobile=True)
+        page.goto(base + "/")
+        expect(page.locator("#cast-status")).to_contain_text("not found a Chromecast")
+        resolve(page)
+        page.locator("#cast-btn").click()
+        expect(page.locator("#cast-status")).to_contain_text("Choose your Chromecast")
+        expect(page.locator("#cast-btn")).to_be_disabled()
+        assert page.evaluate("testCast.userActivation")
+        page.evaluate("testCast.cancelPicker()")
+        expect(page.locator("#cast-status")).to_contain_text("Cast canceled")
+        expect(page.locator("#cast-btn")).to_be_enabled()
+        page.locator("#cast-btn").click()
+        page.evaluate("testCast.selectDevice()")
+        expect(page.locator("#cast-status")).to_have_text("Casting!")
+        assert page.evaluate("testCast.loads.length") == 1
+        page.locator("#cast-btn").click()
+        expect(page.locator("#cast-status")).to_have_text("Casting!")
+        assert page.evaluate("testCast.loads.length") == 2
+        native_timers = page.evaluate("""async () => {
+          const {CastSender} = await import('/cast.js?native-timer-regression');
+          const notices = [];
+          const sender = new CastSender({onChange: state => notices.push(state.message)});
+          const value = await sender.waitWithGuidance(
+            new Promise(resolve => window.setTimeout(() => resolve('settled'), 50)),
+            1, 'native watchdog fired');
+          await sender.waitWithGuidance(Promise.resolve(), 10, 'must be cleared');
+          await new Promise(resolve => window.setTimeout(resolve, 30));
+          return {value, notices};
+        }""")
+        assert native_timers == {"value": "settled", "notices": ["native watchdog fired"]}
+        assert not errors, errors
+        results.append({"scenario": "native browser timers: picker / cancel / retry / media load / watchdog cleanup", "passed": True, "sdk": "test double; timers are real Chrome APIs"})
+        context.close()
 
         context, page, errors = new_page(mobile=True)
         page.clock.install()

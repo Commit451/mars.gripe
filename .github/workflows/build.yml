@@ -44,6 +44,13 @@ jobs:
           docker logs smoke
           exit 1
 
+      - name: Test browser Cast flows with native timers
+        run: |
+          python3 -m venv "$RUNNER_TEMP/cast-browser-tests"
+          "$RUNNER_TEMP/cast-browser-tests/bin/pip" install playwright==1.64.0
+          "$RUNNER_TEMP/cast-browser-tests/bin/python" -m playwright install --with-deps chromium
+          "$RUNNER_TEMP/cast-browser-tests/bin/python" tests/browser_smoke.py --base-url http://127.0.0.1:8000 --channel chromium
+
   deploy:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
