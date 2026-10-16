@@ -1,4 +1,4 @@
-const RECEIVER_APP_ID = '3DC1FA84';
+import { CastSender, loadCastSdk } from './cast.js?v=2';
 
 const form = document.getElementById('resolve-form');
 const urlInput = document.getElementById('url-input');
@@ -9,77 +9,38 @@ const thumbEl = document.getElementById('thumb');
 const titleEl = document.getElementById('title');
 const subtitleEl = document.getElementById('subtitle');
 const castBtn = document.getElementById('cast-btn');
+const castStatusEl = document.getElementById('cast-status');
 const previewBtn = document.getElementById('preview-btn');
 const previewEl = document.getElementById('preview');
 
 let currentStream = null;
-let castReady = false;
+let resolving = false;
 let hls = null;
 
-window['__onGCastApiAvailable'] = (isAvailable) => {
-  if (!isAvailable) {
-    setStatus('Chromecast not supported in this browser. Try Chrome or Edge.', 'error');
-    return;
-  }
-  cast.framework.CastContext.getInstance().setOptions({
-    receiverApplicationId: RECEIVER_APP_ID,
-    autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
-    androidReceiverCompatible: true,
-  });
-  castReady = true;
-  updateCastButton();
-};
+const castSender = new CastSender({
+  onChange(state) {
+    castStatusEl.textContent = state.message;
+    castStatusEl.className = 'status ' + state.kind;
+    updateCastButton();
+  },
+});
+loadCastSdk(castSender);
 
 function updateCastButton() {
-  castBtn.disabled = !(castReady && currentStream);
-}
-
-async function castCurrent() {
-  if (!currentStream) return;
-  setStatus('Opening Chromecast picker…');
-  try {
-    const context = cast.framework.CastContext.getInstance();
-    await context.requestSession();
-    const session = context.getCurrentSession();
-    if (!session) throw new Error('No cast session');
-
-    const mediaInfo = new chrome.cast.media.MediaInfo(
-      currentStream.streamUrl,
-      currentStream.contentType || 'application/x-mpegurl'
-    );
-    mediaInfo.streamType = currentStream.isLive
-      ? chrome.cast.media.StreamType.LIVE
-      : chrome.cast.media.StreamType.BUFFERED;
-
-    const metadata = new chrome.cast.media.GenericMediaMetadata();
-    metadata.title = currentStream.title;
-    if (currentStream.uploader) metadata.subtitle = '@' + currentStream.uploader;
-    if (currentStream.thumbnail) {
-      metadata.images = [{ url: currentStream.thumbnail }];
-    }
-    mediaInfo.metadata = metadata;
-
-    const request = new chrome.cast.media.LoadRequest(mediaInfo);
-    request.autoplay = true;
-    request.currentTime = 0;
-    await session.loadMedia(request);
-    setStatus('Casting!', 'success');
-  } catch (err) {
-    if (err === 'cancel' || err?.code === 'cancel') {
-      setStatus('');
-      return;
-    }
-    console.error(err);
-    const msg = err?.description || err?.code || err?.message || String(err);
-    setStatus('Cast failed: ' + msg, 'error');
-  }
+  const state = castSender.state;
+  castBtn.disabled = !state.ready || !currentStream || state.busy;
+  castBtn.textContent = state.busy
+    ? (state.phase === 'media' ? 'Loading on Chromecast…' : 'Waiting for device selection…')
+    : (state.castState === 'NO_DEVICES_AVAILABLE' ? 'Find Chromecast' : 'Cast to Chromecast');
+  resolveBtn.disabled = resolving || state.busy;
 }
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (resolving || castSender.state.busy) return;
   const url = urlInput.value.trim();
   if (!url) return;
-  resolveBtn.disabled = true;
+  resolving = true;
   setStatus('Resolving broadcast…');
   resultEl.hidden = true;
   stopPreview();
@@ -105,12 +66,13 @@ form.addEventListener('submit', async (e) => {
       thumbEl.hidden = true;
     }
     resultEl.hidden = false;
-    setStatus('Resolved. Ready to cast.', 'success');
+    setStatus('Video resolved. Cast it or preview in this browser.', 'success');
     updateCastButton();
   } catch (err) {
     setStatus('Error: ' + err.message, 'error');
   } finally {
-    resolveBtn.disabled = false;
+    resolving = false;
+    updateCastButton();
   }
 });
 
@@ -119,7 +81,7 @@ previewBtn.addEventListener('click', () => {
   startPreview(currentStream.streamUrl);
 });
 
-castBtn.addEventListener('click', castCurrent);
+castBtn.addEventListener('click', () => castSender.cast(currentStream));
 
 function startPreview(streamUrl) {
   stopPreview();

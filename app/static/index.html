@@ -7,7 +7,7 @@
   <title>mars.gripe — Chromecast your x.com videos</title>
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
   <main>
@@ -29,6 +29,7 @@
     </form>
 
     <div id="status" class="status" role="status" aria-live="polite"></div>
+    <div id="cast-status" class="status" role="status" aria-live="polite">Loading Chromecast support…</div>
 
     <section id="result" class="result" hidden>
       <div class="meta">
@@ -46,12 +47,15 @@
     </section>
 
     <footer>
-      <p>Chromecast requires Chrome, Edge, or another Chromium-based browser on the same network as the cast device.</p>
+      <p>For Chromecast, use Chrome on Android or desktop on the same local network as your Cast device. iPhone/iPad browsers can preview videos, but do not support this Cast Web SDK.</p>
+      <details>
+        <summary>Chromecast picker keeps searching?</summary>
+        <p>Cancel Chrome’s device picker first. Allow local-network or nearby-device access if your browser or system asks, check whether a VPN blocks local devices, then restart Chrome and reload this page. If another Cast app on this phone also cannot find the device, check the Chromecast or router’s guest/client isolation settings.</p>
+      </details>
     </footer>
   </main>
 
-  <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
-  <script src="app.js"></script>
+  <script type="module" src="app.js?v=2"></script>
 </body>
 </html>
