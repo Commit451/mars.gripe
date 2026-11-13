@@ -9,7 +9,7 @@ import httpx
 import yt_dlp
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 PSCP_HOST_SUFFIX = ".video.pscp.tv"
@@ -214,6 +214,12 @@ async def master(broadcast_id: str):
 @app.get("/healthz")
 async def healthz():
     return {"ok": True}
+
+
+@app.get("/watch", include_in_schema=False)
+@app.get("/watch/", include_in_schema=False)
+async def watch():
+    return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
