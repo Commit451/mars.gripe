@@ -2,6 +2,24 @@
 
 Cast public x.com (Twitter) broadcasts - live or a replay - to a Chromecast device.
 
+## Share a broadcast
+
+Include a full broadcast URL or its ID in the `v` query parameter to prefill the
+input and resolve the video automatically:
+
+```text
+https://mars.gripe/watch?v=https://x.com/i/broadcasts/2brajgZlOKRMka
+https://mars.gripe/watch?v=2brajgZlOKRMka
+```
+
+The same parameter also works at `https://mars.gripe/?v=...`. When generating a
+link, URL-encode the value of `v` (for example with `encodeURIComponent`) to
+preserve any query parameters inside the broadcast URL. Bare IDs are expanded
+to `https://x.com/i/broadcasts/<id>` in the input. Missing or blank `v` values
+leave the page idle; unavailable or invalid broadcasts show the normal resolver
+error and can be edited or retried. Casting and preview playback still require
+a button press.
+
 ## Run
 
 ```bash
@@ -64,6 +82,10 @@ uv run --no-project --with playwright python tests/browser_smoke.py --base-url h
 
 The browser checks explicitly mock resolution and Cast selection, then separately
 verify initialization with Google's real SDK. They never launch real-device playback.
+They also cover full-URL and bare-ID share links, encoded nested query parameters,
+root and `/watch` routes, blank inputs, failed resolution and manual retry, and
+preventing duplicate requests or automatic playback. Invalid URLs are checked
+against the real backend validation without contacting X.
 The picker/media-flow regression runs with **native browser timers**, not only a
 fake clock: browser timer functions require a Window receiver, unlike Node timers
 and many clock mocks. CI runs these browser checks before deployment using

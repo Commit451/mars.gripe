@@ -6,6 +6,7 @@ Requires an installed Chrome browser. --base-url can also smoke-test a deploymen
 """
 import argparse
 import json
+from urllib.parse import parse_qs, quote, urlsplit
 from playwright.sync_api import sync_playwright, expect
 
 SDK_URL = "https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"
@@ -71,7 +72,7 @@ def main():
     with sync_playwright() as p:
         browser = p.chromium.launch(channel=args.channel, headless=True)
 
-        def new_page(sdk="mock", mobile=False):
+        def new_page(sdk="mock", mobile=False, resolve_handler=None):
             options = {"viewport": {"width": 412, "height": 915}, "is_mobile": True, "has_touch": True} if mobile else {}
             context = browser.new_context(**options)
             errors = []
@@ -83,7 +84,7 @@ def main():
                 context.route(SDK_URL, lambda route: route.abort())
             elif sdk == "silent":
                 context.route(SDK_URL, lambda route: route.fulfill(content_type="text/javascript", body="/* intentionally silent SDK test double */"))
-            context.route(base + "/api/resolve?*", lambda route: route.fulfill(json=STREAM))
+            context.route(base + "/api/resolve?*", resolve_handler or (lambda route: route.fulfill(json=STREAM)))
             return context, page, errors
 
         def resolve(page):
@@ -91,6 +92,115 @@ def main():
             page.locator("#resolve-btn").click()
             expect(page.locator("#result")).to_be_visible()
             expect(page.locator("#status")).to_contain_text("Video resolved")
+
+        broadcast_id = "2brajgZlOKRMka"
+        broadcast_url = "https://x.com/i/broadcasts/" + broadcast_id
+        shared_url = broadcast_url + "?source=share&note=one%20two"
+        deep_links = [
+            ("/watch?v=" + broadcast_url, broadcast_url),
+            ("/watch?v=" + broadcast_id, broadcast_url),
+            ("/watch?v=" + quote(shared_url, safe=""), shared_url),
+            ("/?v=" + broadcast_url, broadcast_url),
+            ("/?v=" + broadcast_id, broadcast_url),
+            ("/watch/?v=" + broadcast_id, broadcast_url),
+            ("/watch?v=%20" + broadcast_id + "%20", broadcast_url),
+        ]
+        for path, expected_url in deep_links:
+            requests = []
+
+            def record_resolve(route):
+                requests.append(parse_qs(urlsplit(route.request.url).query)["url"][0])
+                route.fulfill(json=STREAM)
+
+            context, page, errors = new_page(mobile=True, resolve_handler=record_resolve)
+            response = page.goto(base + path)
+            assert response.status == 200, (path, response.status)
+            expect(page.locator("#url-input")).to_have_value(expected_url)
+            expect(page.locator("#result")).to_be_visible()
+            expect(page.locator("#status")).to_contain_text("Video resolved")
+            expect(page.locator("#title")).to_have_text(STREAM["title"])
+            expect(page.locator("#cast-btn")).to_be_enabled()
+            expect(page.locator("#resolve-btn")).to_be_enabled()
+            expect(page.locator("#preview")).to_be_hidden()
+            assert requests == [expected_url], requests
+            assert page.evaluate("testCast.requests") == 0
+            assert page.evaluate("testCast.loads.length") == 0
+            assert page.locator("#url-input").evaluate("el => el.checkValidity()")
+            assert page.locator("#url-input").evaluate("el => getComputedStyle(el).flexGrow") == "1"
+            assert not errors, errors
+            results.append({"scenario": "deep link prefills and resolves once: " + path, "passed": True, "sdk": "test double; resolution mocked"})
+            context.close()
+
+        for path in ["/", "/watch", "/watch/", "/watch?v=", "/watch?v=%20%20", "/?other=ignored"]:
+            requests = []
+            context, page, errors = new_page(resolve_handler=lambda route: (requests.append(route.request.url), route.fulfill(json=STREAM)))
+            response = page.goto(base + path)
+            assert response.status == 200, (path, response.status)
+            expect(page.locator("#cast-status")).to_contain_text("not found a Chromecast")
+            expect(page.locator("#url-input")).to_have_value("")
+            expect(page.locator("#status")).to_be_empty()
+            expect(page.locator("#result")).to_be_hidden()
+            assert not requests, requests
+            assert not errors, errors
+            results.append({"scenario": "missing or blank v stays idle: " + path, "passed": True, "sdk": "test double"})
+            context.close()
+
+        requests = []
+
+        def fail_then_resolve(route):
+            requests.append(route.request.url)
+            if len(requests) == 1:
+                route.fulfill(status=404, json={"detail": "Broadcast unavailable (test fixture)"})
+            else:
+                route.fulfill(json=STREAM)
+
+        context, page, errors = new_page(resolve_handler=fail_then_resolve)
+        page.goto(base + "/watch?v=" + broadcast_id)
+        expect(page.locator("#status")).to_have_text("Error: Broadcast unavailable (test fixture)")
+        expect(page.locator("#url-input")).to_have_value(broadcast_url)
+        expect(page.locator("#resolve-btn")).to_be_enabled()
+        expect(page.locator("#result")).to_be_hidden()
+        page.locator("#resolve-btn").click()
+        expect(page.locator("#status")).to_contain_text("Video resolved")
+        assert len(requests) == 2, requests
+        assert not errors, errors
+        results.append({"scenario": "unavailable deep link shows error and allows manual retry", "passed": True, "sdk": "test double; resolution mocked"})
+        context.close()
+
+        pending = []
+        context, page, errors = new_page(resolve_handler=lambda route: pending.append(route))
+        with page.expect_request(base + "/api/resolve?*"):
+            page.goto(base + "/watch?v=" + broadcast_id)
+        expect(page.locator("#status")).to_have_text("Resolving broadcast…")
+        expect(page.locator("#resolve-btn")).to_be_disabled()
+        page.locator("#resolve-form").evaluate("form => form.requestSubmit()")
+        assert len(pending) == 1, pending
+        pending[0].fulfill(json=STREAM)
+        expect(page.locator("#status")).to_contain_text("Video resolved")
+        assert len(pending) == 1, pending
+        assert not errors, errors
+        results.append({"scenario": "automatic resolution prevents overlapping manual requests", "passed": True, "sdk": "test double; resolution mocked"})
+        context.close()
+
+        context, page, errors = new_page()
+        context.unroute(base + "/api/resolve?*")
+        with page.expect_response(base + "/api/resolve?*") as response:
+            page.goto(base + "/watch?v=" + quote("https://example.invalid/not-a-broadcast", safe=""))
+        assert response.value.status == 400
+        expect(page.locator("#status")).to_contain_text("Error: URL must look like")
+        expect(page.locator("#resolve-btn")).to_be_enabled()
+        assert not errors, errors
+        results.append({"scenario": "invalid deep link uses existing real backend URL validation", "passed": True, "sdk": "test double; real API, no upstream resolution"})
+        context.close()
+
+        context, page, errors = new_page(sdk="blocked")
+        page.goto(base + "/watch?v=" + broadcast_id)
+        expect(page.locator("#status")).to_contain_text("Video resolved")
+        expect(page.locator("#cast-status")).to_contain_text("Could not download")
+        expect(page.locator("#preview-btn")).to_be_enabled()
+        assert not errors, errors
+        results.append({"scenario": "deep link resolves even if Cast SDK is unavailable", "passed": True, "sdk": "blocked intentionally; resolution mocked"})
+        context.close()
 
         # Do not install Playwright's fake clock here: it does not enforce the
         # Window receiver required by native setTimeout/clearTimeout. The fake

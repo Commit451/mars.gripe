@@ -35,8 +35,12 @@ function updateCastButton() {
   resolveBtn.disabled = resolving || state.busy;
 }
 
-form.addEventListener('submit', async (e) => {
+form.addEventListener('submit', (e) => {
   e.preventDefault();
+  resolveBroadcast();
+});
+
+async function resolveBroadcast() {
   if (resolving || castSender.state.busy) return;
   const url = urlInput.value.trim();
   if (!url) return;
@@ -74,7 +78,7 @@ form.addEventListener('submit', async (e) => {
     resolving = false;
     updateCastButton();
   }
-});
+}
 
 previewBtn.addEventListener('click', () => {
   if (!currentStream) return;
@@ -116,4 +120,14 @@ function stopPreview() {
 function setStatus(message, kind = 'info') {
   statusEl.textContent = message;
   statusEl.className = 'status' + (message ? ' ' + kind : '');
+}
+
+// Share links accept a full broadcast URL or just its ID. URLSearchParams
+// decodes v once; keep any query string inside a supplied URL intact.
+const initialVideo = new URLSearchParams(window.location.search).get('v')?.trim();
+if (initialVideo) {
+  urlInput.value = /^[A-Za-z0-9_-]+$/.test(initialVideo)
+    ? `https://x.com/i/broadcasts/${initialVideo}`
+    : initialVideo;
+  resolveBroadcast();
 }
